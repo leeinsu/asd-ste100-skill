@@ -1,7 +1,13 @@
 {
-  "name": "asd-ste100",
-  "description": "Rewrite ambiguous English into ASD-STE100 Simplified Technical English",
-  "author": { "name": "danyuchn" },
-  "repository": "https://github.com/danyuchn/asd-ste100-skill",
-  "license": "MIT"
+  "name": "asd-ste100-ko",
+  "description": "한국어 대화·설계·검토 문서 작성과 항공용어 조회",
+  "author": {
+    "name": "leeinsu"
+  },
+  "repository": "https://github.com/leeinsu/asd-ste100-skill",
+  "license": "MIT",
+  "version": "0.1.0",
+  "skills": [
+    "./"
+  ]
 }
