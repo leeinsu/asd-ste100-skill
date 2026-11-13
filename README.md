@@ -1,113 +1,108 @@
-# ASD-STE100 Skill — Simplified Technical English for Agent Output
+# ASD-STE100 한국어 스킬
 
-A Claude Code skill that rewrites dense, ambiguous English into [ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/) (STE) — the controlled-language standard the aerospace and defense industry built so aircraft maintenance instructions cannot be misread.
+한국어 대화와 문서를 명확하게 작성하고 수정하는 `asd-ste100-ko` 스킬이다.
+조건, 예외, 불확실성과 요구 강도를 보존하면서 문장을 정리한다.
+한국어 작성 규칙과 항공용어 6,724개를 담은 `kor_dic.csv`를 함께 제공한다.
+영어 스킬 없이 독립적으로 사용할 수 있다.
 
-This skill repurposes that same discipline for a different reader: an **AI agent** parsing another agent's output, a tool description, an error message, or an inter-agent instruction, with no human in the loop to resolve ambiguity.
+## 설치
 
-## Why STE, and Why for Agents
+현재 한국어 구현은 `feat/korean-skill` 브랜치에 있다.
+아래 방법 중 사용할 도구에 맞는 방법을 선택한다.
+사전 조회에는 Python 3가 필요하다. 추가 Python 패키지는 필요하지 않다.
 
-STE exists because a misread instruction on an aircraft can kill people, and the intended readers were often not native English speakers with no author to call for clarification. The standard's fix: one meaning per word, active voice, simple tenses, one instruction per sentence, short sentences, no dropped words.
+Codex에서 사용하려면 다음 명령을 실행한다.
 
-An LLM agent parsing another agent's output is in a strikingly similar position — no back-channel, no way to ask "did you mean X or Y?" The same rules that keep a mechanic from misreading a torque spec keep a downstream agent from misreading a tool description or an inter-agent message.
-
-## Before / After
-
-| Before | After |
-|---|---|
-| "This tool will attempt to synchronize state across the various backends that have been configured, and if a conflict is detected it may resolve it automatically depending on the strategy that has been set, or otherwise it will surface the conflict for manual review." | "The tool tries to synchronize state across the configured backends. If it finds a conflict, it reads the configured strategy. If the strategy allows automatic resolution, the tool may resolve the conflict without a user. If the tool does not resolve the conflict, it reports the conflict for manual review." |
-| "An error may have occurred while processing your request due to a possible mismatch in the expected data format, which could be caused by an outdated client version." | "Your request may have failed. The cause may be a data format that does not match what the server expects. An outdated client can cause this mismatch. Check your client version." |
-
-More examples, including illustrations of the official STE rules themselves, in [`examples/before-after.md`](examples/before-after.md).
-
-## What This Skill Does
-
-1. Picks a mode. **Strict** covers procedures, error messages, and tool descriptions. **STE-flavored** covers READMEs, PR descriptions, and explanatory prose. STE-flavored keeps the sentence discipline but not the fixed-vocabulary lockdown.
-2. Reads the input English text for meaning.
-3. Flags every rule violation sentence-by-sentence: ambiguous word choice, present-perfect/complex tense, passive voice with an unclear actor, multi-instruction sentences, oversized noun clusters, dropped words, sentences over length, phrasal verbs, nominalized actions, semicolons, hedge stacks, and marketing adjectives.
-4. Rewrites each flagged sentence — without dropping any fact, condition, or scope qualifier from the original. If a shorter phrasing would lose required precision, it keeps the longer phrasing and flags the trade-off instead of silently simplifying.
-5. Outputs the rewritten text on its own — no preamble, no mode announcement, no change summary — plus a one-line `Kept as-is:` note when it deliberately left something unsimplified.
-
-Ask for the reasoning ("show the diff", "which rules did it break") and it outputs a before/after table naming each rule instead.
-
-The structural rules it checks are mechanical — you can point at the word or punctuation mark that breaks each one. The rules that depend on ASD's dictionary are flagged as advisory rather than enforced, and the rules that need taste are left to you.
-
-The linter checks structural patterns only. It does not compare an original text with a rewrite, verify that requirement strength stayed the same, or prove that the rewrite preserved meaning. A zero-violation result means that the configured structural checks found no problems.
-
-The deterministic linter checks semicolons, a short list of soft phrasal verbs (spin up, reach out, dive into, kick off, circle back, touch base), nominalizations, marketing adjectives, passive voice, present-perfect forms (including irregular participles such as "has run"), long sentences, synonym rotation, and dangling conjunctions in supported list items. It does not check noun-cluster length (that needs part-of-speech tagging) and it does not know phrasal verbs outside its list, so "take off the panel" passes. It never flags hedges or modality.
-
-For the sentence-length check, a word is a whitespace-separated token with at least one letter or digit. Inline code in single backticks, list markers, blockquote markers, and bare punctuation such as a spaced em dash are not words.
-
-The repo's own prose does not lint clean: the rule tables quote the patterns they forbid, and some sentences run long. Lint it with `python scripts/ste-lint.py --baseline 36 SKILL.md` and read the findings as examples, not defects.
-
-The dangling-conjunction rule checks list markers at the start of a line with zero to three leading spaces and ASCII spaces after the marker. It supports unordered markers `-`, `*`, and `+`, and ordered numeric markers that end in `.` or `)`, such as `1.` or `1)`. It checks indented continuation lines up to the final meaningful line. It does not parse list syntax inside blockquotes, lazy continuation, or full nested-list semantics. A standalone line with four or more leading spaces is not treated as a list marker. Within an active list item, indentation at the computed content column is treated as continuation text. Fence detection follows CommonMark for blockquotes and for the fence itself. A fence opens on three or more backticks or tildes, also inside a blockquote. It closes on a run of the same character that is at least as long and has only spaces or tabs after it. A fence in a blockquote closes when the quote ends. In an HTML block, a `>` line is text and opens no fence. An HTML block starts on a block tag such as `<div>`, or on one complete tag alone on its line that does not continue a paragraph. Inline HTML such as `<span>` in a line of text starts no HTML block. In the main pass, no fence opens in an HTML block, at any quote depth. An HTML block can also sit in a blockquote, and it ends when its quote ends. The dangling-conjunction pass also tracks HTML blocks, in a list item and on the line of a list marker too. In an HTML block, no fence opens. A line with less indent than the item ends the item and the HTML block in it. On GitHub, a `<pre>` block holds code, and a comment or a `<?`, `<!X` or CDATA block holds hidden text. If such a block spans several lines, its lines before the last line are no item text, and no list item starts there. An open comment in a list item hides the text up to `-->`, also over the next items, and the text after `-->` joins the item. GitHub does the same. Outside list items, no list item starts in any HTML block. In a list item, the text of another HTML block, such as a `<div>` block, is item text with its tags. GitHub also shows the text of a `<script>`, `<style>` or `<textarea>` block, because it escapes these tags. A list marker there starts an item, and the block goes on in that item, so a fence line in it is still text. This pass does not track an HTML block in a blockquote. The main pass accepts a fence at any indent. It also accepts a closing fence up to three columns deeper than the opening fence, also at the top level. The main pass does not detect a fence on the line of a list marker. Its closing line then opens a fence, and the main pass skips the text after it. The dangling-conjunction pass detects such a fence, also after a tab. It also detects a fence in an empty item. Such a fence ends when the item ends. After a fence on a marker line, later fences in list items also end when their items end. Before that, a fence in a list item can go on after the item ends.
-
-The intentionally invalid examples/linter-edge-cases.md file demonstrates incomplete Markdown list items. Run python scripts/ste-lint.py examples/linter-edge-cases.md to confirm that the linter reports the two expected findings. The file is a test fixture and should not be used as compliant STE prose.
-
-It does **not** reproduce ASD's official ~900-word approved dictionary. The standard is free to obtain but not free to redistribute: Issue 9 permits reproduction only with ASD's written authority, or by eight listed categories of organisation that this project does not belong to. This skill applies the underlying *principle* (plainest available word, used the same way every time) rather than checking against a fixed word list. For certified STE-compliant documentation, use the real standard.
-
-Full rule summary and citations: [`references/writing-rules.md`](references/writing-rules.md).
-
-## Installation
-
-### Quick Install (npx skills)
-
-The fastest way to install this skill is the [skills CLI](https://skills.sh/) — no clone, no path setup. Run it from your project root:
-
-```bash
-npx skills add danyuchn/asd-ste100-skill
+```sh
+mkdir -p ~/.codex/skills
+git clone --branch feat/korean-skill https://github.com/leeinsu/asd-ste100-skill.git ~/.codex/skills/asd-ste100-ko
 ```
 
-This pulls the skill from the GitHub repo and installs it for the current project. The CLI sends anonymous install telemetry (skill name and timestamp, no personal or device information) to help rank skills on the skills.sh leaderboard. Set `DISABLE_TELEMETRY=1` to opt out.
+`CODEX_HOME`을 별도로 지정했다면 그 폴더의 `skills/asd-ste100-ko`에 설치한다.
+설치 후 Codex를 다시 시작한다.
 
-Update later with `npx skills update`.
+Claude Code에서 사용하려면 다음 명령을 실행한다.
 
-### Clone
-
-```bash
-git clone https://github.com/danyuchn/asd-ste100-skill ~/.claude/skills/asd-ste100
+```sh
+mkdir -p ~/.claude/skills
+git clone --branch feat/korean-skill https://github.com/leeinsu/asd-ste100-skill.git ~/.claude/skills/asd-ste100-ko
 ```
 
-This clones the repo into `~/.claude/skills/`, making the skill available in every Claude Code project. Best for contributors and anyone who wants a live checkout that updates with `git pull`.
+플러그인 이름은 `asd-ste100-ko`, 마켓플레이스 이름은 `asd-ste100-ko-skill`이다.
+플러그인은 루트의 `SKILL.md`를 읽도록 [경로를 지정한다](.claude-plugin/plugin.json).
+경로 설정은 [Claude Code 플러그인 규격](https://code.claude.com/docs/en/plugins-reference)을 따른다.
 
-## Usage
+## 사용
 
-Trigger with a request to simplify or clarify English text:
+스킬 이름과 작업을 함께 요청한다.
 
+```text
+asd-ste100-ko로 이 설계를 한국어로 설명해 줘.
+asd-ste100-ko로 이 문장을 다듬어 줘. 조건과 불확실성은 유지해 줘.
+asd-ste100-ko로 한국어 검토자가 읽을 커밋 메시지와 PR 설명을 작성해 줘.
 ```
-Disambiguate this tool description
-Rewrite this error message so an agent can't misparse it
-Apply ASD-STE100 to this instruction
+
+새 글은 요청한 형식으로 작성한다. 수정 작업은 수정문만 기본으로 제공한다.
+수정 이유가 필요하면 원문·수정문·적용 규칙 비교를 요청한다.
+자세한 사용 형태는 [예시](examples/before-after-ko.md)에서 확인한다.
+
+### 영어 스킬과 함께 쓰는 경우
+
+혼합 운용은 선택 사항이다.
+사용자의 명시적인 언어 지정과 상위 지침이 우선한다.
+
+| 사용 상황 | 스킬 |
+| --- | --- |
+| 한국어 사용자와 대화·설계 | `asd-ste100-ko` |
+| 한국어 사용자가 검토할 커밋·PR 메시지와 문서 | `asd-ste100-ko` |
+| 한국어 사용자가 포함된 팀에 공유할 문서 | `asd-ste100-ko` |
+| LLM 간 대화·작업 지시·내부 문서 등 그 외 작업 | 영어 `asd-ste100` |
+
+## 사전 조회
+
+스킬 폴더에서 다음 명령을 실행한다.
+다른 폴더에서는 스크립트의 절대 경로를 사용한다.
+도구는 설치본에 포함된 CSV를 기본으로 읽는다.
+
+```sh
+python3 scripts/ko-terms.py --query ADAPTER --domain MAINT
+python3 scripts/ko-terms.py --query AC
+python3 scripts/ko-terms.py --validate
 ```
 
-Or paste text and ask Claude to "disambiguate this" / "apply STE100 to this" / "reduce ambiguity in this output."
+`ADAPTER` 조회는 248·249번 항목을 모두 반환한다.
+`AC` 조회는 6·344·806·823번 항목을 반환한다.
+결과는 JSON이다. 조회 방식과 오류 처리는 [사전 안내](references/dictionary.md)에 정의한다.
 
-You get the rewritten text back and nothing else. To see which rules were applied, add "show the diff" or "explain the changes" to the request.
+사전 출처는 [공공데이터포털의 국토교통부 항공용어사전](https://www.data.go.kr/data/15052307/fileData.do)이다.
+자료 버전은 `국토교통부_항공용어사전_20251231`, 기준일은 2025-12-31이다.
+포털 등록일·수정일은 2026-02-26이다.
+포털 이용허락범위는 "이용허락범위 제한 없음"이다.
 
-## Scope
+## 검증과 유지보수
 
-Built for: agent-to-agent messages, tool/function descriptions, error messages, system prompts, inter-agent instructions — any English text a machine or non-native reader has to parse without a human to ask.
+```sh
+python3 scripts/ko-terms.py --selftest
+python3 scripts/ste-lint.py --selftest
+```
 
-Not built for: creative writing, marketing copy, or anything where voice and nuance are the point — STE is deliberately flat and literal by design.
+한국어 의미 보존 평가는 [평가 사례](tests/korean-rewrite-cases.json)를 사용한다.
+사례의 필수 의미와 금지 변경을 기준으로 결과를 검토한다.
+허용 예시와 문장이 다르다는 이유만으로 실패로 판정하지 않는다.
+2026-11-13 평가에서 16개 사례가 의미 보존 검토를 통과했다.
+입력·출력·검토자와 평가 한계는 [검토 기록](tests/korean-rewrite-review.json)에 남겼다.
 
-One limit worth stating up front: this fixes the form of a text, not its substance. A paragraph with nothing to say comes out short, clean, and still empty.
+영어 검사기, [영어 규칙](references/writing-rules.md), [영어 예시](examples/before-after.md)는 원본을 유지한다.
+`examples/linter-edge-cases.md`는 의도적으로 오류 두 건을 포함한 영어 검사기 테스트 자료다.
+영어 검사기로 한국어의 문법이나 의미 보존을 판정하지 않는다.
 
-## Other Languages
+## 원본과 라이선스
 
-- **Hebrew:** [g4lb/asd-ste100-hebrew-skill](https://github.com/g4lb/asd-ste100-hebrew-skill) is a Hebrew port of this skill. It includes a Hebrew linter. ASD-STE100 defines English only, so the Hebrew rules are an adaptation, not an official standard.
-- **Indonesian:** [jshsinaga/asd-ste100-indonesian-skill](https://github.com/jshsinaga/asd-ste100-indonesian-skill) adapts this skill for Indonesian technical text. Its Indonesian rules are an adaptation, not an official ASD-STE100 standard.
+[danyuchn/asd-ste100-skill](https://github.com/danyuchn/asd-ste100-skill)의 버전 0.4.0을 기반으로 한다.
+원본 분석 기준은 `d5caf54905eac776e9bb3a247be84153701ff4f8`이다.
+구현 기준은 [한국어 설계서](docs/korean-adaptation-design.md)에 기록한다.
+스킬 코드와 문서는 [MIT 라이선스](LICENSE)를 유지한다.
+사전 데이터의 출처와 이용허락범위는 위의 포털 표기를 따른다.
 
-## Related Tools
-
-- [meiluosi/rewrite-fidelity-skill](https://github.com/meiluosi/rewrite-fidelity-skill) compares the original text with the rewrite. It flags changes in meaning and modality. It uses pattern matching, so check each flag yourself.
-
-## Sources
-
-- [ASD-STE100 official site](https://www.asd-ste100.org/)
-- [ASD-STE100 — About STE](https://www.asd-ste100.org/about_STE.html)
-- [ASD Europe — Simplified Technical English](https://www.asd-europe.org/standards-specifications/simplified-technical-english/)
-- [Simplified Technical English — Wikipedia](https://en.wikipedia.org/wiki/Simplified_Technical_English)
-- [TechScribe — ASD-STE100 Simplified Technical English](https://www.techscribe.co.uk/techw/asd-simplified-technical-english.htm)
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+이 스킬은 ASD-STE100 원칙을 한국어에 적용한 비공식 지침이다.
+정식 ASD-STE100 적합성을 주장하지 않는다.

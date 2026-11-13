@@ -1,10 +1,12 @@
 {
-  "name": "asd-ste100-skill",
-  "description": "The asd-ste100 skill as a Claude Code plugin",
-  "owner": { "name": "danyuchn" },
+  "name": "asd-ste100-ko-skill",
+  "description": "한국어 작성 규칙과 항공용어사전을 제공하는 Claude Code 플러그인",
+  "owner": {
+    "name": "leeinsu"
+  },
   "plugins": [
     {
-      "name": "asd-ste100",
+      "name": "asd-ste100-ko",
       "source": "./"
     }
   ]
